@@ -1,85 +1,75 @@
-from agents import research_agent, summarizer_agent
-from memory import shared_memory
-import re
-
-def multi_agent_system(user_query):
-
-    # SUMMARIZE CASE
-    if "summarize" in user_query.lower():
-        past_data = shared_memory.load_memory_variables({"input": user_query})
-        history = past_data.get("history", "")
-
-        # Extract last AI answer
-        if "AI:" in history:
-            research_output = history.split("AI:")[-1].strip()
-        else:
-            research_output = history
-
-    # NORMAL CASE
-    else:
-        if any(op in user_query for op in ["+", "-", "*", "/"]):
-            try:
-                expression = re.findall(r'[0-9+\-*/.]+', user_query)
-                expression = "".join(expression)
-                research_output = str(eval(expression))
-            except:
-                research_output = "calculation error"
-        else:
-            research_output = research_agent.run(user_query)
-
-        # Save to memory
-        shared_memory.save_context(
-            {"input": user_query},
-            {"output": research_output}
-        )
-
-    # FINAL OUTPUT
-    if "summarize" in user_query.lower():
-        final_output = summarizer_agent.invoke({"text": research_output})["text"]
-    else:
-        final_output = research_output
-
-    return final_output
+import os
+from dotenv import load_dotenv
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.chains import LLMChain
 
 
-if __name__ == "__main__":
-    print("Multi-Agent System Started (type 'exit' to quit)")
+def load_environment():
+    load_dotenv()
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY not found. Please set it in .env file.")
+
+    return api_key
+
+
+def initialize_llm():
+    llm = ChatOpenAI(
+        model="gpt-3.5-turbo",
+        temperature=0.7
+    )
+    return llm
+
+
+def create_chain(llm):
+    prompt = ChatPromptTemplate.from_template(
+        "You are a helpful assistant.\n"
+        "Answer the following question clearly:\n"
+        "{question}"
+    )
+
+    chain = LLMChain(
+        llm=llm,
+        prompt=prompt
+    )
+
+    return chain
+
+
+def run_agent(chain):
+    print("\n🤖 LangChain Agent Started (type 'exit' to quit)\n")
 
     while True:
-        query = input("You: ")
+        user_input = input("You: ").strip()
 
-        if not query.strip():
-            continue
-
-        if query.lower() == "exit":
+        if user_input.lower() in ["exit", "quit"]:
+            print("👋 Exiting... Goodbye!")
             break
 
-        response = multi_agent_system(query)
-        print("AI:", response)
-        
-def full_workflow(user_query):
+        if not user_input:
+            print("⚠️ Please enter a question.")
+            continue
 
-    # Step 1: Research
-    research_output = multi_agent_system(user_query)
+        try:
+            response = chain.run(question=user_input)
+            print("Agent:", response)
 
-    # Step 2: Summarize
-    summary = summarizer_agent.invoke({"text": research_output})["text"]
+        except Exception as e:
+            print("❌ Error:", str(e))
 
-    # Step 3: Compose Email
-    email = f"""
-Subject: Information about {user_query}
 
-Dear Sir/Madam,
+def main():
+    try:
+        load_environment()
+        llm = initialize_llm()
+        chain = create_chain(llm)
+        run_agent(chain)
 
-Here is the information:
+    except Exception as e:
+        print("❌ Startup Error:", str(e))
 
-{summary}
 
-Thank you.
-"""
-
-    return {
-        "research": research_output,
-        "summary": summary,
-        "email": email
-    }
+if _name_ == "_main_":
+    main()
