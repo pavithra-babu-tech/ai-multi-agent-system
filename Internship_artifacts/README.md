@@ -33,6 +33,3 @@ Milestones Covered:
 
 ---
 
-## 👨‍💻 Author
-
-Internship Project Submission
